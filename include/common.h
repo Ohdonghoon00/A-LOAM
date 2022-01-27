@@ -19,6 +19,9 @@
 
 typedef pcl::PointXYZI PointType;
 
+
+const std::vector<float> imu2rig_pose = {-0.011773881878296,-2.212344247385963,2.229193892963689,-0.016975989407230,0.016444757006134,0.128779023189435};
+const std::vector<float> lidar2rig_pose = {1.5620435019860173, -0.005377623186353324, 0.003014408980859652, -8.458334129298635E-4, -0.19542397891778734, -0.0012719333618026098};
 typedef Eigen::Matrix<float, 6, 1> Vector6f;
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
 Eigen::Vector3d Origin{0.0, 0.0, 0.0};
@@ -39,7 +42,7 @@ struct OdometryData
     std::map< int, Vector6d > MappingHighFrequency_WPose;
     std::map< int, Vector6d > Mapping_WPose;
 
-    Vector6d RelPose(int a, int b){;}
+    // Vector6d RelPose(int a, int b){;}
 };
 
 struct Line
@@ -430,7 +433,7 @@ std::vector<Eigen::Vector3d> ConvertFromROSmsg(sensor_msgs::PointCloud2 &PointCl
     // }
 
     std::vector<Eigen::Vector3d> points(PointCloudNum);
-    for(int i = 0; i < PointCloudNum; i++){
+    for(size_t i = 0; i < PointCloudNum; i++){
         points[i].x() = (double)dataptr[i].x;
         points[i].y() = (double)dataptr[i].y;
         points[i].z() = (double)dataptr[i].z;
@@ -499,6 +502,22 @@ visualization_msgs::MarkerArray ConverToROSmsg(const ros::Time &timestamp, const
     msg_arr.markers.push_back(msg);
     
     return msg_arr;
+}
+
+void InputSlamPose(Eigen::Matrix4d RT, double *q, double *t)
+{
+    Eigen::Matrix3d r = RT.block<3, 3>(0, 0);
+    Eigen::Quaterniond qq(r);
+
+    q[0] = qq.x();
+    q[1] = qq.y();
+    q[2] = qq.z();
+    q[3] = qq.w();
+
+    t[0] = RT(0, 3);
+    t[1] = RT(1, 3);
+    t[2] = RT(2, 3);
+
 }
 // std::vector<Eigen::Vector3d> ConvertFromROSmsg(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 // {

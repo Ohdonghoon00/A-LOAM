@@ -110,7 +110,13 @@ std::mutex mBuf;
 
 std::map< int, Vector6d> Odometry_WPose; // Lidar Scan Frame - Pose
 std::ofstream OdomPoseFile;
-
+double LastTimestamp = 0.0;
+std::string RigPosePath = "/home/multipleye/Dataset/201014_skt_lobby_day_lidar/rovins2_all_frames.txt";
+std::ifstream RigPoseFile(RigPosePath, std::ifstream::in);
+std::string LidaridPath = "/home/multipleye/Dataset/201014_skt_lobby_day_lidar/result/LidarRelativePoseTocamid/aloam_odometry_RelativePose.txt";
+std::ifstream LidaridFile(LidaridPath, std::ifstream::in);
+std::vector<Vector6d> RigPoses;
+std::vector<int> LidarTocamidx;
 
 // undistort lidar point
 void TransformToStart(PointType const *const pi, PointType *const po)
@@ -220,11 +226,55 @@ int main(int argc, char **argv)
 
     OdomPoseFile.open("/home/multipleye/aloam_odometry_RelativePose.txt");
 
+    if(!RigPoseFile.is_open()){
+        std::cout << " error rig pose txt " << std::endl;
+        return EXIT_FAILURE;
+    }
+    if(!LidaridFile.is_open()){
+        std::cout << " error Lidar id txt " << std::endl;
+        return EXIT_FAILURE;
+    }
+    Eigen::Matrix4f LidarToRig_ = To44RT(lidar2rig_pose);
+    Eigen::Matrix4d LidarToRig = LidarToRig_.cast<double>();
+
+    Vector6d p;
+    p << 0, 0, 0, 0, 0, 0;
+    RigPoses.push_back(p);
+
+    std::string line;
+    while(std::getline(RigPoseFile, line)){
+        std::string value;
+        std::vector<std::string> values;
+
+        std::stringstream ss(line);
+        while(std::getline(ss, value, ' '))
+            values.push_back(value);
+        Vector6d pos;
+        pos << std::stod(values[1]), std::stod(values[2]), std::stod(values[3]), std::stod(values[4]), std::stod(values[5]), std::stod(values[6]);
+        Eigen::Matrix4d Rigpos = To44RT(pos);
+        Rigpos = LidarToRig.inverse() * Rigpos * LidarToRig;
+        
+        RigPoses.push_back(To6DOF(Rigpos));
+    }
+
+    std::string _line;
+    while(std::getline(LidaridFile, _line)){
+        std::string value;
+        std::vector<std::string> values;
+
+        std::stringstream ss(_line);
+        while(std::getline(ss, value, ' '))
+            values.push_back(value);
+        int idx = std::stoi(values[0]);
+        LidarTocamidx.push_back(idx);
+    }
+
+
+
     int frameCount = 0;
     int OdometryCnt = 0;
     ros::Rate rate(100);
 
-    // OdomPoseFile.open("aloam_odometry_RelativePose.txt");
 
     while (ros::ok())
     {
@@ -236,6 +286,9 @@ int main(int argc, char **argv)
         {
             std::cout << " OdometryCnt !!!****************************************************************    " << OdometryCnt << std::endl;
             
+
+
+
             timeCornerPointsSharp = cornerSharpBuf.front()->header.stamp.toSec();
             timeCornerPointsLessSharp = cornerLessSharpBuf.front()->header.stamp.toSec();
             timeSurfPointsFlat = surfFlatBuf.front()->header.stamp.toSec();
@@ -282,6 +335,19 @@ int main(int argc, char **argv)
             }
             else
             {
+                //////////////////////////////////////////////// camera rig pose init ////////////////////////////////////
+
+                // int idx_curr = LidarTocamidx[OdometryCnt];
+                // int idx_last = LidarTocamidx[OdometryCnt - 1];
+                // Vector6d rigpose_curr = RigPoses[idx_curr];
+                // Eigen::Matrix4d Rigpos_curr = To44RT(rigpose_curr);
+                // Vector6d rigpose_last = RigPoses[idx_last];
+                // Eigen::Matrix4d Rigpos_last = To44RT(rigpose_last);
+                // Eigen::Matrix4d Rigpos = Rigpos_last.inverse() * Rigpos_curr;
+                // InputSlamPose(Rigpos, para_q, para_t);
+                
+                //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
                 int cornerPointsSharpNum = cornerPointsSharp->points.size();
                 int surfPointsFlatNum = surfPointsFlat->points.size();
 
@@ -506,9 +572,24 @@ int main(int argc, char **argv)
                     options.max_num_iterations = 4;
                     options.minimizer_progress_to_stdout = false;
                     ceres::Solver::Summary summary;
-                    ceres::Solve(options, &problem, &summary);
+                    // ceres::Solve(options, &problem, &summary);
                     //printf("solver time %f ms \n", t_solver.toc());
                 }
+                            
+
+                //////////////////////////////////////////////// camera rig pose init(no optimize) ////////////////////////////////////
+
+                int idx_curr = LidarTocamidx[OdometryCnt];
+                int idx_last = LidarTocamidx[OdometryCnt - 1];
+                Vector6d rigpose_curr = RigPoses[idx_curr];
+                Eigen::Matrix4d Rigpos_curr = To44RT(rigpose_curr);
+                Vector6d rigpose_last = RigPoses[idx_last];
+                Eigen::Matrix4d Rigpos_last = To44RT(rigpose_last);
+                Eigen::Matrix4d Rigpos = Rigpos_last.inverse() * Rigpos_curr;
+                InputSlamPose(Rigpos, para_q, para_t);
+                
+                //////////////////////////////////////////////////////////////////////////////////////////////////////////
+            
                 //printf("optimization twice time %f \n", t_opt.toc());
                 std::cout << "Odometry Relative Result " << std::endl;
                 std::cout << t_last_curr.x() << "	" << t_last_curr.y() << "	" << t_last_curr.z() << std::endl;
@@ -520,13 +601,16 @@ int main(int argc, char **argv)
             std::cout << "Odometry W-Curr Result " << std::endl;
             Vector6d CurrPose = To6DOF(q_w_curr, t_w_curr);
             Odometry_WPose[OdometryCnt] = CurrPose;
+            
+            double CurrTimestamp = timeSurfPointsLessFlat;
             if(OdometryCnt > 0){
                 Vector6d relpose = RelativePose(Odometry_WPose, OdometryCnt-1, OdometryCnt);
                 std::cout << "Test : " << relpose.transpose() << std::endl;
-                OdomPoseFile << OdometryCnt-1 << " " << OdometryCnt << " " << relpose[0] << " " << relpose[1] << " " << relpose[2] << " "
+                OdomPoseFile << std::setprecision(19) << LastTimestamp << " " << CurrTimestamp << " " << std::setprecision(7) << relpose[0] << " " << relpose[1] << " " << relpose[2] << " "
                                 << relpose[3] << " " << relpose[4] << " " << relpose[5] << std::endl;
             }
 
+            std::cout << "Odometry ros time : " << std::setprecision(19) << CurrTimestamp << std::endl;
 
             // publish odometry
             nav_msgs::Odometry laserOdometry;
@@ -613,7 +697,7 @@ int main(int argc, char **argv)
             //printf("whole laserOdometry time %f ms \n", t_whole.toc());
             if(t_whole.toc() > 100)
                 ROS_WARN("odometry process over 100ms");
-
+            LastTimestamp = CurrTimestamp;
             frameCount++;
             OdometryCnt++;
         }
