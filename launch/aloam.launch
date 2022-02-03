@@ -28,7 +28,7 @@
 
     <!-- nodes -->
     <node pkg="aloam" type="ascanRegistration" name="ascanRegistration" output="screen" />
-    <node pkg="aloam" type="alaserOdometry" name="alaserOdometry" output="screen" />
+    <!--<node pkg="aloam" type="alaserOdometry" name="alaserOdometry" output="screen" /> -->
     <node pkg="aloam" type="alaserMapping" name="alaserMapping" output="screen" />
     <!--<node pkg="aloam_velodyne" type="alaserPGO" name="alaserPGO" output="screen" /> SC-A-LOAM -->
 

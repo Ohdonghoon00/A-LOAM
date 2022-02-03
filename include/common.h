@@ -26,14 +26,14 @@ typedef Eigen::Matrix<float, 6, 1> Vector6f;
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
 Eigen::Vector3d Origin{0.0, 0.0, 0.0};
 std::string LidarFrame = "/camera_init";
-struct Line;
-struct Plane;
+// struct Line;
+// struct Plane;
 sensor_msgs::PointCloud2 ConverToROSmsg(const std::vector<Eigen::Vector3d> &PointCloud);
-visualization_msgs::MarkerArray ConverToROSmsg(const std::vector<Line> &line, const ros::Time &timestamp, const std::string &frameid);
+// visualization_msgs::MarkerArray ConverToROSmsg(const std::vector<Line> &line, const ros::Time &timestamp, const std::string &frameid);
 visualization_msgs::MarkerArray ConverToROSmsg(const ros::Time &timestamp, const std::string &frameid);
 std::vector<Eigen::Vector3d> ConvertFromROSmsg(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg);
 std::vector<Eigen::Vector3d> ConvertFromROSmsg(const sort_lidarpoints::feature_infoConstPtr &laserCloudMsg);
-Eigen::Matrix3d NormalToRotation(Eigen::Vector3d n);
+// Eigen::Matrix3d NormalToRotation(Eigen::Vector3d n);
 Eigen::Matrix4d To44RT(Vector6d rot);
 
 struct OdometryData
@@ -45,22 +45,22 @@ struct OdometryData
     // Vector6d RelPose(int a, int b){;}
 };
 
-struct Line
-{
-    Eigen::Vector3d p1;
-    Eigen::Vector3d p2;
-    int id;
-    Eigen::Vector3d directionVec() {return p2 - p1;}
-};
+// struct Line
+// {
+//     Eigen::Vector3d p1;
+//     Eigen::Vector3d p2;
+//     int id;
+//     Eigen::Vector3d directionVec() {return p2 - p1;}
+// };
 
-struct Plane
-{
-    Eigen::Vector3d normal;
-    Eigen::Vector3d centroid;
-    double scale = 2.0;
-    int id;
+// struct Plane
+// {
+//     Eigen::Vector3d normal;
+//     Eigen::Vector3d centroid;
+//     double scale = 2.0;
+//     int id;
     
-};
+// };
 
 Vector6d To6DOF(Eigen::Quaterniond q, Eigen::Vector3d t)
 {
@@ -86,6 +86,16 @@ Vector6d To6DOF(Eigen::Matrix4d RT)
     Vector6d Pose;
     Pose << r.x(), r.y(), r.z(), RT(0, 3), RT(1, 3), RT(2, 3);
     return Pose;
+}
+
+Eigen::Quaterniond ToQuaternion(const Vector6d Pose)
+{
+    Eigen::Matrix4d Pos = To44RT(Pose);
+    Eigen::Matrix3d rot = Pos.block<3, 3>(0, 0); 
+
+    Eigen::Quaterniond q(rot);
+
+    return q; 
 }
 
 Vector6d RelativePose(std::map< int, Vector6d > Odometry_WPose, int a, int b)
@@ -192,96 +202,96 @@ Eigen::Vector3f ToAxis(Eigen::Matrix4f LidarRotation)
 
 }
 
-void FeatureToMsg(  sort_lidarpoints::feature_info &msg, 
-                    const std::vector<Line> line,
-                    const std::vector<Plane> plane)
-{
-    // Line information
-    for(size_t i = 0; i < line.size(); i++){
+// void FeatureToMsg(  sort_lidarpoints::feature_info &msg, 
+//                     const std::vector<Line> line,
+//                     const std::vector<Plane> plane)
+// {
+//     // Line information
+//     for(size_t i = 0; i < line.size(); i++){
         
-        msg.p1_x[i] = line[i].p1.x();
-        msg.p1_y[i] = line[i].p1.y();
-        msg.p1_z[i] = line[i].p1.z();
+//         msg.p1_x[i] = line[i].p1.x();
+//         msg.p1_y[i] = line[i].p1.y();
+//         msg.p1_z[i] = line[i].p1.z();
 
-        msg.p2_x[i] = line[i].p2.x();
-        msg.p2_y[i] = line[i].p2.y();
-        msg.p2_z[i] = line[i].p2.z();
-    }
+//         msg.p2_x[i] = line[i].p2.x();
+//         msg.p2_y[i] = line[i].p2.y();
+//         msg.p2_z[i] = line[i].p2.z();
+//     }
 
-    // Plane information
-    for(size_t i = 0; i < plane.size(); i++){
+//     // Plane information
+//     for(size_t i = 0; i < plane.size(); i++){
         
-        msg.normal_x[i] = plane[i].normal.x();
-        msg.normal_y[i] = plane[i].normal.y();
-        msg.normal_z[i] = plane[i].normal.z();
+//         msg.normal_x[i] = plane[i].normal.x();
+//         msg.normal_y[i] = plane[i].normal.y();
+//         msg.normal_z[i] = plane[i].normal.z();
 
-        msg.centroid_x[i] = plane[i].centroid.x();
-        msg.centroid_y[i] = plane[i].centroid.y();
-        msg.centroid_z[i] = plane[i].centroid.z();
+//         msg.centroid_x[i] = plane[i].centroid.x();
+//         msg.centroid_y[i] = plane[i].centroid.y();
+//         msg.centroid_z[i] = plane[i].centroid.z();
 
-        msg.scale[i] = plane[i].scale;
-    }
-}
+//         msg.scale[i] = plane[i].scale;
+//     }
+// }
 
-void MsgToFeature(  const sort_lidarpoints::feature_infoConstPtr &FeatureMsg,
-                    std::vector<Line> &line, std::vector<Plane> &plane)
-{
-    // Line Information
-    for(size_t i = 0; i < FeatureMsg->p1_x.size(); i++){
+// void MsgToFeature(  const sort_lidarpoints::feature_infoConstPtr &FeatureMsg,
+//                     std::vector<Line> &line, std::vector<Plane> &plane)
+// {
+//     // Line Information
+//     for(size_t i = 0; i < FeatureMsg->p1_x.size(); i++){
         
-        line[i].p1.x() = FeatureMsg->p1_x[i];
-        line[i].p1.y() = FeatureMsg->p1_y[i];
-        line[i].p1.z() = FeatureMsg->p1_z[i];
+//         line[i].p1.x() = FeatureMsg->p1_x[i];
+//         line[i].p1.y() = FeatureMsg->p1_y[i];
+//         line[i].p1.z() = FeatureMsg->p1_z[i];
 
-        line[i].p2.x() = FeatureMsg->p2_x[i];
-        line[i].p2.y() = FeatureMsg->p2_y[i];
-        line[i].p2.z() = FeatureMsg->p2_z[i];
-    }
+//         line[i].p2.x() = FeatureMsg->p2_x[i];
+//         line[i].p2.y() = FeatureMsg->p2_y[i];
+//         line[i].p2.z() = FeatureMsg->p2_z[i];
+//     }
 
-    // Plane Information
-    for(size_t i = 0; i < FeatureMsg->normal_x.size(); i++){
+//     // Plane Information
+//     for(size_t i = 0; i < FeatureMsg->normal_x.size(); i++){
 
-        plane[i].normal.x() = FeatureMsg->normal_x[i];
-        plane[i].normal.y() = FeatureMsg->normal_y[i];
-        plane[i].normal.z() = FeatureMsg->normal_z[i];
+//         plane[i].normal.x() = FeatureMsg->normal_x[i];
+//         plane[i].normal.y() = FeatureMsg->normal_y[i];
+//         plane[i].normal.z() = FeatureMsg->normal_z[i];
 
-        plane[i].centroid.x() = FeatureMsg->centroid_x[i];
-        plane[i].centroid.y() = FeatureMsg->centroid_y[i];
-        plane[i].centroid.z() = FeatureMsg->centroid_z[i];
+//         plane[i].centroid.x() = FeatureMsg->centroid_x[i];
+//         plane[i].centroid.y() = FeatureMsg->centroid_y[i];
+//         plane[i].centroid.z() = FeatureMsg->centroid_z[i];
 
-        plane[i].scale = FeatureMsg->scale[i];
-    }
-}
+//         plane[i].scale = FeatureMsg->scale[i];
+//     }
+// }
 
-void PublishFeature(const ros::Publisher &publisher, sort_lidarpoints::feature_info &pubmsg, const std::vector<Line> line, const std::vector<Plane> plane, const ros::Time &timestamp, const std::string &frameid)
-{
-    // sort_lidarpoints::feature_info pubmsg;
+// void PublishFeature(const ros::Publisher &publisher, sort_lidarpoints::feature_info &pubmsg, const std::vector<Line> line, const std::vector<Plane> plane, const ros::Time &timestamp, const std::string &frameid)
+// {
+//     // sort_lidarpoints::feature_info pubmsg;
     
-    // memory
-    // Line
-    pubmsg.p1_x.assign(line.size(), 0);
-    pubmsg.p1_y.assign(line.size(), 0);
-    pubmsg.p1_z.assign(line.size(), 0);
-    pubmsg.p2_x.assign(line.size(), 0);
-    pubmsg.p2_y.assign(line.size(), 0);
-    pubmsg.p2_z.assign(line.size(), 0);
+//     // memory
+//     // Line
+//     pubmsg.p1_x.assign(line.size(), 0);
+//     pubmsg.p1_y.assign(line.size(), 0);
+//     pubmsg.p1_z.assign(line.size(), 0);
+//     pubmsg.p2_x.assign(line.size(), 0);
+//     pubmsg.p2_y.assign(line.size(), 0);
+//     pubmsg.p2_z.assign(line.size(), 0);
     
-    // Plane
-    pubmsg.normal_x.assign(plane.size(), 0);
-    pubmsg.normal_y.assign(plane.size(), 0);
-    pubmsg.normal_z.assign(plane.size(), 0);
-    pubmsg.centroid_x.assign(plane.size(), 0);
-    pubmsg.centroid_y.assign(plane.size(), 0);
-    pubmsg.centroid_z.assign(plane.size(), 0);
-    pubmsg.scale.assign(plane.size(), 0);
+//     // Plane
+//     pubmsg.normal_x.assign(plane.size(), 0);
+//     pubmsg.normal_y.assign(plane.size(), 0);
+//     pubmsg.normal_z.assign(plane.size(), 0);
+//     pubmsg.centroid_x.assign(plane.size(), 0);
+//     pubmsg.centroid_y.assign(plane.size(), 0);
+//     pubmsg.centroid_z.assign(plane.size(), 0);
+//     pubmsg.scale.assign(plane.size(), 0);
     
-    FeatureToMsg(pubmsg, line, plane);
+//     FeatureToMsg(pubmsg, line, plane);
     
-    // pubmsg.header.stamp = timestamp;
-    // pubmsg.header.frame_id = frameid;
+//     // pubmsg.header.stamp = timestamp;
+//     // pubmsg.header.frame_id = frameid;
 
-    publisher.publish(pubmsg);    
-}
+//     publisher.publish(pubmsg);    
+// }
 
 void IMUdataToMsg(sort_lidarpoints::feature_info &msg, const Vector6f IMUdata)
 {
@@ -317,58 +327,58 @@ void PublishPointCloud(const ros::Publisher &publisher, const std::vector<Eigen:
     publisher.publish(pubmsg);    
 }
 
-void PublishLine(const ros::Publisher &publisher, const std::vector<Line> &line, const ros::Time &timestamp, const std::string &frameid)
-{
-    visualization_msgs::MarkerArray pubmsg;
-    pubmsg = ConverToROSmsg(line, timestamp, frameid);
+// void PublishLine(const ros::Publisher &publisher, const std::vector<Line> &line, const ros::Time &timestamp, const std::string &frameid)
+// {
+//     visualization_msgs::MarkerArray pubmsg;
+//     pubmsg = ConverToROSmsg(line, timestamp, frameid);
 
-    visualization_msgs::MarkerArray DeleteMarkermsg;
-    DeleteMarkermsg = ConverToROSmsg(timestamp, frameid);
+//     visualization_msgs::MarkerArray DeleteMarkermsg;
+//     DeleteMarkermsg = ConverToROSmsg(timestamp, frameid);
     
-    publisher.publish(DeleteMarkermsg);
-    publisher.publish(pubmsg);    
-}
+//     publisher.publish(DeleteMarkermsg);
+//     publisher.publish(pubmsg);    
+// }
 
-void VisualizeLine(const rviz_visual_tools::RvizVisualToolsPtr VisualLine, const std::vector<Line> line)
-{
-    VisualLine->deleteAllMarkers();
-    for(size_t i = 0; i < line.size(); i++)
-        VisualLine->publishLine(line[i].p1, line[i].p2, rviz_visual_tools::BLUE, rviz_visual_tools::XLARGE);
-    VisualLine->trigger();
-}
+// void VisualizeLine(const rviz_visual_tools::RvizVisualToolsPtr VisualLine, const std::vector<Line> line)
+// {
+//     VisualLine->deleteAllMarkers();
+//     for(size_t i = 0; i < line.size(); i++)
+//         VisualLine->publishLine(line[i].p1, line[i].p2, rviz_visual_tools::BLUE, rviz_visual_tools::XLARGE);
+//     VisualLine->trigger();
+// }
 
-void VisualizePlane(const rviz_visual_tools::RvizVisualToolsPtr VisualPlane, const std::vector<Plane> plane)
-{
-   VisualPlane->deleteAllMarkers();
-   // Publish Plane
-   for(size_t i = 0; i < plane.size(); i++){
+// void VisualizePlane(const rviz_visual_tools::RvizVisualToolsPtr VisualPlane, const std::vector<Plane> plane)
+// {
+//    VisualPlane->deleteAllMarkers();
+//    // Publish Plane
+//    for(size_t i = 0; i < plane.size(); i++){
 
-        Eigen::Isometry3d VisualizePlane;
-        VisualizePlane.translation() = plane[i].centroid;
-        VisualizePlane.linear() = NormalToRotation(plane[i].normal);
-        std::string id = std::to_string(plane[i].id);
-        VisualPlane->publishXYPlane(VisualizePlane, rviz_visual_tools::TRANSLUCENT_DARK, plane[i].scale);
-        VisualPlane->publishText(VisualizePlane, id, rviz_visual_tools::WHITE, rviz_visual_tools::XXXXLARGE, false);
-        VisualPlane->trigger();
-   }    
-}
+//         Eigen::Isometry3d VisualizePlane;
+//         VisualizePlane.translation() = plane[i].centroid;
+//         VisualizePlane.linear() = NormalToRotation(plane[i].normal);
+//         std::string id = std::to_string(plane[i].id);
+//         VisualPlane->publishXYPlane(VisualizePlane, rviz_visual_tools::TRANSLUCENT_DARK, plane[i].scale);
+//         VisualPlane->publishText(VisualizePlane, id, rviz_visual_tools::WHITE, rviz_visual_tools::XXXXLARGE, false);
+//         VisualPlane->trigger();
+//    }    
+// }
         
 
 
 
-void VisualizePlaneNormal(const rviz_visual_tools::RvizVisualToolsPtr VisualPlaneNormal, const std::vector<Plane> plane)
-{
-    VisualPlaneNormal->deleteAllMarkers();
-    // publish plane normal
-    for(size_t i = 0; i < plane.size(); i++){    
+// void VisualizePlaneNormal(const rviz_visual_tools::RvizVisualToolsPtr VisualPlaneNormal, const std::vector<Plane> plane)
+// {
+//     VisualPlaneNormal->deleteAllMarkers();
+//     // publish plane normal
+//     for(size_t i = 0; i < plane.size(); i++){    
         
-        Eigen::Isometry3d VisualizePlaneNormal;
-        VisualizePlaneNormal.translation() = plane[i].centroid;
-        VisualizePlaneNormal.linear() = NormalToRotation(plane[i].normal);
-        VisualPlaneNormal->publishZArrow(VisualizePlaneNormal, rviz_visual_tools::RED, rviz_visual_tools::LARGE, 1.0);
-        VisualPlaneNormal->trigger();
-    }
-}
+//         Eigen::Isometry3d VisualizePlaneNormal;
+//         VisualizePlaneNormal.translation() = plane[i].centroid;
+//         VisualizePlaneNormal.linear() = NormalToRotation(plane[i].normal);
+//         VisualPlaneNormal->publishZArrow(VisualizePlaneNormal, rviz_visual_tools::RED, rviz_visual_tools::LARGE, 1.0);
+//         VisualPlaneNormal->trigger();
+//     }
+// }
 
 sensor_msgs::PointCloud2 ConverToROSmsg(const std::vector<Eigen::Vector3d> &PointCloud)
 {
@@ -453,43 +463,43 @@ std::vector<Eigen::Vector3d> ConvertFromROSmsg(sensor_msgs::PointCloud2 &PointCl
     return points;
 }
 
-visualization_msgs::MarkerArray ConverToROSmsg(const std::vector<Line> &line, const ros::Time &timestamp, const std::string &frameid)
-{
-    visualization_msgs::MarkerArray line_arr;
+// visualization_msgs::MarkerArray ConverToROSmsg(const std::vector<Line> &line, const ros::Time &timestamp, const std::string &frameid)
+// {
+//     visualization_msgs::MarkerArray line_arr;
 
 
 
-    for(size_t i = 0; i < line.size(); i++){
-        visualization_msgs::Marker msg;
-        msg.header.stamp = timestamp;
-        msg.header.frame_id = frameid;
-        msg.id = (int)i;
-        msg.action = visualization_msgs::Marker::ADD;
-        msg.pose.orientation.w = 1.0;
-        msg.scale.x = 0.03;
-        msg.scale.y = 0.08;
-        msg.scale.z = 0.05;
-        msg.color.r = 1.0;
-        msg.color.a = 1.0;          
-        msg.type = visualization_msgs::Marker::ARROW;
+//     for(size_t i = 0; i < line.size(); i++){
+//         visualization_msgs::Marker msg;
+//         msg.header.stamp = timestamp;
+//         msg.header.frame_id = frameid;
+//         msg.id = (int)i;
+//         msg.action = visualization_msgs::Marker::ADD;
+//         msg.pose.orientation.w = 1.0;
+//         msg.scale.x = 0.03;
+//         msg.scale.y = 0.08;
+//         msg.scale.z = 0.05;
+//         msg.color.r = 1.0;
+//         msg.color.a = 1.0;          
+//         msg.type = visualization_msgs::Marker::ARROW;
         
-        geometry_msgs::Point p;
-        p.x = line[i].p1.x();
-        p.y = line[i].p1.y();
-        p.z = line[i].p1.z();
-        msg.points.push_back(p);
+//         geometry_msgs::Point p;
+//         p.x = line[i].p1.x();
+//         p.y = line[i].p1.y();
+//         p.z = line[i].p1.z();
+//         msg.points.push_back(p);
 
-        p.x = line[i].p2.x();
-        p.y = line[i].p2.y();
-        p.z = line[i].p2.z();
-        msg.points.push_back(p);
+//         p.x = line[i].p2.x();
+//         p.y = line[i].p2.y();
+//         p.z = line[i].p2.z();
+//         msg.points.push_back(p);
 
-        line_arr.markers.push_back(msg);
-    }
+//         line_arr.markers.push_back(msg);
+//     }
 
 
-  return line_arr;
-}
+//   return line_arr;
+// }
 
 visualization_msgs::MarkerArray ConverToROSmsg(const ros::Time &timestamp, const std::string &frameid)
 {
@@ -570,22 +580,22 @@ double PointDistance(Eigen::Vector3d p1, Eigen::Vector3d p2){
   return sqrt((p1.x()-p2.x())*(p1.x()-p2.x()) + (p1.y()-p2.y())*(p1.y()-p2.y()) + (p1.z()-p2.z())*(p1.z()-p2.z()));
 }
 
-double Point2LineDistance(Line l, Eigen::Vector3d p){
-    return ((p - l.p1).cross(p - l.p2)).norm() / (l.p1 - l.p2).norm();
-}
+// double Point2LineDistance(Line l, Eigen::Vector3d p){
+//     return ((p - l.p1).cross(p - l.p2)).norm() / (l.p1 - l.p2).norm();
+// }
 
-double LineToLineDistance(Line l1, Line l2){
+// double LineToLineDistance(Line l1, Line l2){
     
-    if(0)
-        ;// parallel
-    else{
+//     if(0)
+//         ;// parallel
+//     else{
         
-        Eigen::Vector3d b1 = l1.directionVec();
-        Eigen::Vector3d b2 = l2.directionVec();
-        Eigen::Vector3d normal = b1.cross(b2);
-        return std::abs((l1.p1 - l2.p1).dot(normal)) / normal.norm();
-    }
-}
+//         Eigen::Vector3d b1 = l1.directionVec();
+//         Eigen::Vector3d b2 = l2.directionVec();
+//         Eigen::Vector3d normal = b1.cross(b2);
+//         return std::abs((l1.p1 - l2.p1).dot(normal)) / normal.norm();
+//     }
+// }
 
 double CosRaw2(double a, double b, float ang){
     return sqrt(a * a + b * b - 2 * a * b * cos(ang * M_PI / 180));
@@ -602,23 +612,23 @@ double NextChannelPointDis(Eigen::Vector3d p, float VerticalAngleRatio){
     return CosRaw2(dist, NextPointDis, VerticalAngleRatio);
 }
 
-Eigen::Matrix3d NormalToRotation(Eigen::Vector3d n){
-    Eigen::Matrix3d r;
-    Eigen::Vector3d UnitVec = Eigen::Vector3d::UnitZ();
-    Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(UnitVec, n);
-    return q.toRotationMatrix();
-}
+// Eigen::Matrix3d NormalToRotation(Eigen::Vector3d n){
+//     Eigen::Matrix3d r;
+//     Eigen::Vector3d UnitVec = Eigen::Vector3d::UnitZ();
+//     Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(UnitVec, n);
+//     return q.toRotationMatrix();
+// }
 
-double Point2PlaneDistance(Plane p, Eigen::Vector3d x){
-    Eigen::Vector3d b = x - p.centroid;
-    return std::abs(p.normal.dot(b)) / p.normal.norm();
-}
+// double Point2PlaneDistance(Plane p, Eigen::Vector3d x){
+//     Eigen::Vector3d b = x - p.centroid;
+//     return std::abs(p.normal.dot(b)) / p.normal.norm();
+// }
 
-double DiffOriginToPlaneDistance(Plane p1, Plane p2){
-    return std::abs(Point2PlaneDistance(p1, Origin) - Point2PlaneDistance(p2, Origin));
-}
+// double DiffOriginToPlaneDistance(Plane p1, Plane p2){
+//     return std::abs(Point2PlaneDistance(p1, Origin) - Point2PlaneDistance(p2, Origin));
+// }
 
-float AngleBetweenPlane(Plane p1, Plane p2){
-    Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(p1.normal, p2.normal);
-    return 2 * std::atan2(q.vec().norm(), std::fabs(q.w())) * ( 180 / M_PI );
-}
+// float AngleBetweenPlane(Plane p1, Plane p2){
+//     Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(p1.normal, p2.normal);
+//     return 2 * std::atan2(q.vec().norm(), std::fabs(q.w())) * ( 180 / M_PI );
+// }

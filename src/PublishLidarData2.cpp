@@ -12,6 +12,8 @@
 #include <glog/logging.h>
 
 #include <rosbag/bag.h>
+#include <nav_msgs/Odometry.h>
+#include <nav_msgs/Path.h>
 
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/opencv.hpp"
@@ -34,7 +36,10 @@ using namespace std;
 
 namespace po = boost::program_options;
 
-
+// Extrinsic parameter rig - imu / rig - lidar
+const Eigen::Matrix4f IMUToRig = To44RT(imu2rig_pose);
+const Eigen::Matrix4f LidarToRig_ = To44RT(lidar2rig_pose);
+Eigen::Matrix4d LidarToRig = LidarToRig_.cast<double>();
 
 struct LidarData 
 {
@@ -152,78 +157,19 @@ void MoveDistortionPoints(std::vector<Eigen::Vector3d> &points, const Eigen::Mat
 
 }
 
-int main(int argc, char **argv) 
+int ReadIMUdata(const std::string Path, std::vector<double> *IMUtimestamps, std::vector<Eigen::Vector3f> *IMUGyros)
 {
-    
-    ros::init(argc, argv, "TestPublishData");
-    ros::NodeHandle nh("~");
-    LidarData lidar_data;
-    
-    // launch parameter
-    rosbag::Bag bag;
-    bool to_bag, ToUndistortionPoints;
-    std::string data_dir, output_bag_file, yaml_path;
-    int publish_delay;
-    
-    nh.getParam("data_dir", data_dir);
-    nh.getParam("to_bag", to_bag);
-    nh.getParam("ToUndistortionPoints", ToUndistortionPoints);
-    nh.getParam("publish_delay", publish_delay);
-    
-    // Read Yaml setting file
-
-
-    // Extrinsic parameter rig - imu / rig - lidar
-    const Eigen::Matrix4f IMUToRig = To44RT(imu2rig_pose);
-    const Eigen::Matrix4f LidarToRig = To44RT(lidar2rig_pose);
-    
-    
-    
-    Eigen::Matrix4f LidarRotation;
-    
-    
-    
-    
-    // bagfile
-    if (to_bag){
-        nh.getParam("output_bag_file", output_bag_file);
-        bag.open(data_dir + output_bag_file, rosbag::bagmode::Write);
-    }
-    
-    pubLaserCloud = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_points", 2);
-    // pubfeature = nh.advertise<sort_lidarpoints::feature_info>("/velodyne_points", 100);
-
-    // publish delay
-    ros::Rate r(10.0 / publish_delay);
-
-    
-    // Lidar timestamp.csv path
-    std::string LidarcsvPath = data_dir + "lidar_timestamp.csv";
-    std::ifstream LidarcsvFile(LidarcsvPath, std::ifstream::in);
-
-    if(!LidarcsvFile.is_open()){
-        std::cout << " Lidar csv file failed to open " << std::endl;
-        return EXIT_FAILURE;
-    }
-    
-    // IMU csv data path
-    std::string IMUcsvPath = data_dir + "imu_data.csv";
-    std::ifstream IMUcsvFile(IMUcsvPath, std::ifstream::in);
+    std::ifstream IMUcsvFile(Path, std::ifstream::in);
 
     if(!IMUcsvFile.is_open()){
         std::cout << " IMU csv file failed to open " << std::endl;
         return EXIT_FAILURE;
     }
 
-
-
-    
-    std::string Lidarcsvline, IMUcsvline;
-    int Lidarline_num = 0;
+    std::string IMUcsvline;
     int IMUline_num = 0;
     
-    std::vector<double> IMUtimestamps;
-    vector<Eigen::Vector3f> IMUGyros;
+
     
     // Read IMU Data csv
     while(std::getline(IMUcsvFile, IMUcsvline) && ros::ok())
@@ -249,7 +195,7 @@ int main(int argc, char **argv)
             IMUvalues.push_back(IMUvalue);
         // std::cout << " IMUline num : " << IMUline_num << "th    ";
             
-        IMUtimestamps.push_back(std::stod(IMUvalues[0]));
+        IMUtimestamps->push_back(std::stod(IMUvalues[0]) * 10e9);
         // std::cout.precision(15);
         // std::cout << " IMU timestamp : " << IMUtimestamp << std::endl;
 
@@ -258,7 +204,7 @@ int main(int argc, char **argv)
         Gyro[0] = std::stof(IMUvalues[1]);
         Gyro[1] = std::stof(IMUvalues[2]);
         Gyro[2] = std::stof(IMUvalues[3]);
-        IMUGyros.push_back(Gyro);
+        IMUGyros->push_back(Gyro);
          
              
             
@@ -267,10 +213,118 @@ int main(int argc, char **argv)
     } 
 
     IMUcsvFile.close();
-       
+}
 
-    int IMUcount = 0;
+int ReadVIOdata(const std::string Path, std::vector<double> *VIOtimestamps, std::vector<Vector6d> *VIORidarPoses)
+{
+    std::ifstream Rovins2PoseFile(Path, std::ifstream::in);
+
+    if(!Rovins2PoseFile.is_open()){
+        std::cout << " Rovins2Pose file failed to open " << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::string line;
+    int line_num = 0;
+
+    while(std::getline(Rovins2PoseFile, line) && ros::ok()){
+
+        std::string value;
+        std::vector<std::string> values;        
+
+        // values[0]        -> camera id
+        // values[1] ~ [6]  -> rig pose
+        // values[7]        -> timestamps 
+        
+        std::stringstream ss(line);
+        while(std::getline(ss, value, ' '))
+            values.push_back(value);
+
+        Vector6d pos;
+        pos << std::stod(values[1]), std::stod(values[2]), std::stod(values[3]), std::stod(values[4]), std::stod(values[5]), std::stod(values[6]);
+        Eigen::Matrix4d Rigpos = To44RT(pos);
+        Eigen::Matrix4d Ridarpos = LidarToRig.inverse() * Rigpos * LidarToRig;
+
+        VIOtimestamps->push_back(std::stod(values[7]) * 10e-10 );
+        VIORidarPoses->push_back(To6DOF(Ridarpos));
+
+        line_num++;
+    }
+
+    Rovins2PoseFile.close();
+}
+
+int main(int argc, char **argv) 
+{
+    
+    ros::init(argc, argv, "TestPublishData");
+    ros::NodeHandle nh("~");
+    LidarData lidar_data;
+    
+    // launch parameter
+    rosbag::Bag bag;
+    bool to_bag, ToUndistortionPoints;
+    std::string data_dir, output_bag_file, yaml_path;
+    int publish_delay;
+    
+    nh.getParam("data_dir", data_dir);
+    nh.getParam("to_bag", to_bag);
+    nh.getParam("ToUndistortionPoints", ToUndistortionPoints);
+    nh.getParam("publish_delay", publish_delay);
+    
+    // Read Yaml setting file
+
+    
+    // bagfile
+    if (to_bag){
+        nh.getParam("output_bag_file", output_bag_file);
+        bag.open(data_dir + output_bag_file, rosbag::bagmode::Write);
+    }
+    
+    pubLaserCloud = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_points", 2);
+
+    ros::Publisher pubVIOodometry = nh.advertise<nav_msgs::Odometry>("/VIO_odom_to_init", 100);
+    
+    ros::Publisher pubVIOPath = nh.advertise<nav_msgs::Path>("/VIO_odom_path", 100);
+    nav_msgs::Path VIOPath;
+    // pubfeature = nh.advertise<sort_lidarpoints::feature_info>("/velodyne_points", 100);
+
+    // publish delay
+    ros::Rate r(10.0 / publish_delay);
+    
+    // Read IMU data
+    std::string IMUcsvPath = data_dir + "imu_data.csv";
+    std::vector<double> IMUtimestamps;
+    std::vector<Eigen::Vector3f> IMUGyros;
+    
+    ReadIMUdata(IMUcsvPath, &IMUtimestamps, &IMUGyros);
+    
+    // VIO data
+    std::string Rovins2PosePath = data_dir + "rovins2_all_frames.txt";
+    std::vector<double> VIOtimestamps;
+    std::vector<Vector6d> VIORidarPoses;
+    
+    Vector6d p;
+    p << 0, 0, 0, 0, 0, 0;
+    VIORidarPoses.push_back(p);
+    VIOtimestamps.push_back(0.0);
+
+    ReadVIOdata(Rovins2PosePath, &VIOtimestamps, &VIORidarPoses);
+    
+    // Lidar timestamp.csv path
+    std::string LidarcsvPath = data_dir + "lidar_timestamp.csv";
+    std::ifstream LidarcsvFile(LidarcsvPath, std::ifstream::in);
+
+    if(!LidarcsvFile.is_open()){
+        std::cout << " Lidar csv file failed to open " << std::endl;
+        return EXIT_FAILURE;
+    }
+    
     // Read Lidar timestamp.csv
+    Eigen::Matrix4f LidarRotation;
+    std::string Lidarcsvline;
+    int Lidarline_num(0), IMUcount(0);
+    
     while(std::getline(LidarcsvFile, Lidarcsvline) && ros::ok())
     {
         if(Lidarline_num == 0){
@@ -291,7 +345,7 @@ int main(int argc, char **argv)
         while(std::getline(ss, value, ','))
             values.push_back(value);
         int fidx = std::stoi(values[2]);
-        double LidarScantimestamp = std::stod(values[1]);
+        double LidarScantimestamp = std::stod(values[1]) * 10e9;
 
         // Binary Data Path
         std::stringstream Lidar_binary_path;
@@ -330,7 +384,7 @@ int main(int argc, char **argv)
         }
 
         Eigen::Matrix4f RT_ = IMUToRig * IMURotation_integral * IMUToRig.inverse();
-        Eigen::Matrix4f RT = LidarToRig.inverse() * RT_ * LidarToRig;
+        Eigen::Matrix4f RT = LidarToRig_.inverse() * RT_ * LidarToRig_;
         LidarRotation = RT;
 
         for (int j = 0; j < num_seqs; j++){
@@ -380,11 +434,47 @@ int main(int argc, char **argv)
 
         }
             
-        
         // timestamp
         ros::Time timestamp_ros;
         timestamp_ros.fromNSec(lidar_data.timestamp_ns);
         std::cout << "Timestamp : " << timestamp_ros << std::endl;
+        double LidarTime = timestamp_ros.toSec();
+        std::cout << "Lidartime : " << LidarTime << std::endl;
+        size_t Minidx = -1;
+        double Mindiff = 1000;
+        for(size_t i = 0; i < VIOtimestamps.size(); i++){
+            double diff = std::fabs(VIOtimestamps[i] - LidarTime);
+            if(diff < Mindiff){
+                Mindiff = diff;
+                Minidx = i;
+            }    
+            
+        }
+        std::cout << "Min timetstamp : " << VIOtimestamps[Minidx];
+        Eigen::Quaterniond q = ToQuaternion(VIORidarPoses[Minidx]);
+
+        // publish odometry
+        nav_msgs::Odometry VIOodometry;
+        VIOodometry.header.frame_id = LidarFrame;
+        VIOodometry.child_frame_id = "/laser_odom";
+        VIOodometry.header.stamp = timestamp_ros;
+        VIOodometry.pose.pose.orientation.x = q.x();
+        VIOodometry.pose.pose.orientation.y = q.y();
+        VIOodometry.pose.pose.orientation.z = q.z();
+        VIOodometry.pose.pose.orientation.w = q.w();
+        VIOodometry.pose.pose.position.x = VIORidarPoses[Minidx][3];
+        VIOodometry.pose.pose.position.y = VIORidarPoses[Minidx][4];
+        VIOodometry.pose.pose.position.z = VIORidarPoses[Minidx][5];
+        pubVIOodometry.publish(VIOodometry);
+
+        geometry_msgs::PoseStamped VIOPose;
+        VIOPose.header = VIOodometry.header;
+        VIOPose.pose = VIOodometry.pose.pose;
+        VIOPath.header.stamp = VIOodometry.header.stamp;
+        VIOPath.poses.push_back(VIOPose);
+        VIOPath.header.frame_id = LidarFrame;
+        pubVIOPath.publish(VIOPath);
+
 
         // publish
         sensor_msgs::PointCloud2 output;
@@ -393,14 +483,13 @@ int main(int argc, char **argv)
         output.header.stamp = timestamp_ros;
         output.header.frame_id = "/camera_init";
         pubLaserCloud.publish(output);
-
+        
         // Publish IMU Gyro Data
         // Vector6f rt = to6DOF(LidarRotation);
         // PublishIMUandcloud(pubfeature, PublishPoints, rt, timestamp_ros, LidarFrame);
 
         // bagfile
         if( to_bag ) bag.write("/velodyne_points", timestamp_ros, output);
-
 
         Lidarline_num++;
         r.sleep();
@@ -416,6 +505,21 @@ int main(int argc, char **argv)
     
     return 0;
 }
+
+
+    
+
+    
+
+    
+    
+
+
+
+
+
+
+       
             
     
 
