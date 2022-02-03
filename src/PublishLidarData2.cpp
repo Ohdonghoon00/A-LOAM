@@ -35,11 +35,14 @@ ros::Publisher pubLaserCloud;
 using namespace std;
 
 namespace po = boost::program_options;
+bool publish = true;
+int cnt = 0;
 
 // Extrinsic parameter rig - imu / rig - lidar
 const Eigen::Matrix4f IMUToRig = To44RT(imu2rig_pose);
 const Eigen::Matrix4f LidarToRig_ = To44RT(lidar2rig_pose);
 Eigen::Matrix4d LidarToRig = LidarToRig_.cast<double>();
+
 
 struct LidarData 
 {
@@ -232,7 +235,7 @@ int ReadVIOdata(const std::string Path, std::vector<double> *VIOtimestamps, std:
         std::string value;
         std::vector<std::string> values;        
 
-        // values[0]        -> camera id
+        // values[0]        -> camera fidx
         // values[1] ~ [6]  -> rig pose
         // values[7]        -> timestamps 
         
@@ -252,6 +255,45 @@ int ReadVIOdata(const std::string Path, std::vector<double> *VIOtimestamps, std:
     }
 
     Rovins2PoseFile.close();
+}
+
+int ReadSlamdata(const std::string Path, std::vector<double> *SlamKFtimestamps, std::vector<Vector6d> *SlamKFPoses, std::vector<int> *Slamcamidxs)
+{
+    std::ifstream SlamPoseFile(Path, std::ifstream::in);
+
+    if(!SlamPoseFile.is_open()){
+        std::cout << " SlamPoseFile failed to open " << std::endl;
+        return EXIT_FAILURE;        
+    }
+
+    std::string line;
+    int line_num = 0;
+
+    while(std::getline(SlamPoseFile, line) && ros::ok()){
+
+        std::string value;
+        std::vector<std::string> values;
+
+        // values[0]        -> camera fidx
+        // values[1] ~ [6]  -> slam rig? pose
+        // values[7]        -> timestamps
+
+        std::stringstream ss(line);
+        while(std::getline(ss, value, ' '))
+            values.push_back(value);
+
+        Vector6d pos;
+        pos << std::stod(values[1]), std::stod(values[2]), std::stod(values[3]), std::stod(values[4]), std::stod(values[5]), std::stod(values[6]);
+        Eigen::Matrix4d Rigpos = To44RT(pos);
+        Eigen::Matrix4d Ridarpos = LidarToRig.inverse() * Rigpos * LidarToRig;
+
+        SlamKFtimestamps->push_back(std::stod(values[7]) * 10e-10 );
+        SlamKFPoses->push_back(To6DOF(Ridarpos));
+        Slamcamidxs->push_back(std::stoi(values[0]));
+
+        line_num++;        
+    }
+    SlamPoseFile.close();
 }
 
 int main(int argc, char **argv) 
@@ -311,6 +353,14 @@ int main(int argc, char **argv)
 
     ReadVIOdata(Rovins2PosePath, &VIOtimestamps, &VIORidarPoses);
     
+    // SLAM Pose data ( Keyframe )
+    std::string SlamPosePath = data_dir + "slam_poses.txt";
+    std::vector<double> SlamKFtimestamps;
+    std::vector<Vector6d> SlamKFPoses;
+    std::vector<int> Slamcamidxs;
+
+    ReadSlamdata(SlamPosePath, &SlamKFtimestamps, &SlamKFPoses, &Slamcamidxs);
+
     // Lidar timestamp.csv path
     std::string LidarcsvPath = data_dir + "lidar_timestamp.csv";
     std::ifstream LidarcsvFile(LidarcsvPath, std::ifstream::in);
@@ -437,10 +487,10 @@ int main(int argc, char **argv)
         // timestamp
         ros::Time timestamp_ros;
         timestamp_ros.fromNSec(lidar_data.timestamp_ns);
-        std::cout << "Timestamp : " << timestamp_ros << std::endl;
         double LidarTime = timestamp_ros.toSec();
-        std::cout << "Lidartime : " << LidarTime << std::endl;
-        size_t Minidx = -1;
+        
+        // find lidartimestamp - cam timestamp
+        int Minidx = -1;
         double Mindiff = 1000;
         for(size_t i = 0; i < VIOtimestamps.size(); i++){
             double diff = std::fabs(VIOtimestamps[i] - LidarTime);
@@ -450,10 +500,36 @@ int main(int argc, char **argv)
             }    
             
         }
-        std::cout << "Min timetstamp : " << VIOtimestamps[Minidx];
-        Eigen::Quaterniond q = ToQuaternion(VIORidarPoses[Minidx]);
+        // Eigen::Quaterniond q = ToQuaternion(VIORidarPoses[Minidx]);
 
+        int Minvalue = 100;
+        int Minslamidx = -1;
+        for(int i = 0; i < Slamcamidxs.size(); i++){
+            int idx_diff = std::abs(Slamcamidxs[i] - Minidx);
+            if(idx_diff < Minvalue){
+                Minvalue = idx_diff;
+                Minslamidx = i;
+            }
+        }
+        if(Minvalue < 2){
+            Eigen::Quaterniond q;
+            Eigen::Vector3d p;
+            if(Minvalue == 0){
+                q = ToQuaternion(SlamKFPoses[Minslamidx]);
+                p << SlamKFPoses[Minslamidx][3], SlamKFPoses[Minslamidx][4], SlamKFPoses[Minslamidx][5];
+                std::cout << " lidartimestamp and Keyframe are same timestamp !!!  fidx : " << Slamcamidxs[Minslamidx] << std::endl;
+                cnt = 1;
+            }
+            else{
+                q = ToQuaternion(SlamKFPoses[Minslamidx]);
+                p << SlamKFPoses[Minslamidx][3], SlamKFPoses[Minslamidx][4], SlamKFPoses[Minslamidx][5];
+                cnt++;
+                std::cout << " different !! all frames fidx : " << Slamcamidxs[Minslamidx] << std::endl;
+            }
+
+            if(cnt % 2 == 1){
         // publish odometry
+        std::cout << "Publish!" << std::endl;
         nav_msgs::Odometry VIOodometry;
         VIOodometry.header.frame_id = LidarFrame;
         VIOodometry.child_frame_id = "/laser_odom";
@@ -462,9 +538,9 @@ int main(int argc, char **argv)
         VIOodometry.pose.pose.orientation.y = q.y();
         VIOodometry.pose.pose.orientation.z = q.z();
         VIOodometry.pose.pose.orientation.w = q.w();
-        VIOodometry.pose.pose.position.x = VIORidarPoses[Minidx][3];
-        VIOodometry.pose.pose.position.y = VIORidarPoses[Minidx][4];
-        VIOodometry.pose.pose.position.z = VIORidarPoses[Minidx][5];
+        VIOodometry.pose.pose.position.x = p.x();
+        VIOodometry.pose.pose.position.y = p.y();
+        VIOodometry.pose.pose.position.z = p.z();
         pubVIOodometry.publish(VIOodometry);
 
         geometry_msgs::PoseStamped VIOPose;
@@ -487,10 +563,12 @@ int main(int argc, char **argv)
         // Publish IMU Gyro Data
         // Vector6f rt = to6DOF(LidarRotation);
         // PublishIMUandcloud(pubfeature, PublishPoints, rt, timestamp_ros, LidarFrame);
-
+        
         // bagfile
         if( to_bag ) bag.write("/velodyne_points", timestamp_ros, output);
+            }
 
+        }
         Lidarline_num++;
         r.sleep();
         ifs.close();   
