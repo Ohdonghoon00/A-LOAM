@@ -191,8 +191,6 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
         //     }
         // }
 
-        Eigen::Vector3d a;
-        a.squaredNorm();
         if (LIDAR_TYPE == "VLP16" && N_SCANS == 16)
         {
             scanID = int((angle + 15) / 2 + 0.5);
@@ -516,7 +514,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
 
     nh.param<int>("scan_line", N_SCANS, 16);
-    nh.param<std::string>("lidar_type", LIDAR_TYPE, "KITTI");
+    nh.param<std::string>("lidar_type", LIDAR_TYPE, "VLP16");
     nh.param<double>("minimum_range", MINIMUM_RANGE, 5.0);
 
     //printf("scan line number %d \n", N_SCANS);

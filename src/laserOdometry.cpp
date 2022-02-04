@@ -234,8 +234,7 @@ int main(int argc, char **argv)
         std::cout << " error Lidar id txt " << std::endl;
         return EXIT_FAILURE;
     }
-    Eigen::Matrix4f LidarToRig_ = To44RT(lidar2rig_pose);
-    Eigen::Matrix4d LidarToRig = LidarToRig_.cast<double>();
+    Eigen::Matrix4d LidarToRig = To44RT(lidar2rig_pose);
 
     Vector6d p;
     p << 0, 0, 0, 0, 0, 0;

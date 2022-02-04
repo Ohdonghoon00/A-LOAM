@@ -19,38 +19,20 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   tf
   rviz_visual_tools
-  message_generation
 )
-find_package( Boost REQUIRED COMPONENTS 
-timer )
+# find_package( Boost REQUIRED COMPONENTS 
+# timer )
  
 
-find_package(OpenCV REQUIRED)
 find_package(PCL REQUIRED)
 find_package(Ceres REQUIRED)
-
-add_message_files(
-  DIRECTORY msg
-  FILES
-  feature_info.msg
-)
-
-generate_messages(
-  DEPENDENCIES
-  geometry_msgs
-  std_msgs
-  nav_msgs
-  sensor_msgs
-  visualization_msgs
-)
 
 include_directories(
   include
   ${PCL_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
 	${catkin_INCLUDE_DIRS} 
-  ${OpenCV_INCLUDE_DIRS}
-  ${Boost_INCLUDE_DIRS}
+  # ${Boost_INCLUDE_DIRS}
 )
 
 catkin_package(
@@ -60,21 +42,20 @@ catkin_package(
 )
 
 add_executable(ascanRegistration src/scanRegistration.cpp)
-target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 # add_executable(ascanRegistration src/scanRegistration2.cpp)
 # add_dependencies(ascanRegistration ${PROJECT_NAME}_generate_messages_cpp)
-# target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${OpenCV_LIBS})
+# target_link_libraries(ascanRegistration ${catkin_LIBRARIES})
 
 # add_executable(alaserOdometry src/laserOdometry.cpp)
-# target_link_libraries(alaserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${OpenCV_LIBS})
+# target_link_libraries(alaserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
 add_executable(alaserMapping src/laserMapping.cpp)
-target_link_libraries(alaserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(alaserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
 add_executable(PublishLidarData2 src/PublishLidarData2.cpp)
-add_dependencies(PublishLidarData2 ${PROJECT_NAME}_generate_messages_cpp)
-target_link_libraries(PublishLidarData2 glog ${catkin_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(PublishLidarData2 glog ${catkin_LIBRARIES})
 
 
 
