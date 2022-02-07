@@ -61,6 +61,8 @@ struct DataBase
     std::vector<double> Lidartimestamps;
     std::vector<Eigen::Matrix3Xd> LidarPoints;
 
+    std::map<int, int> VIOidx2Lidaridx;
+
 };
 
 struct OdometryData
