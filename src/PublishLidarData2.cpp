@@ -261,10 +261,8 @@ int ReadLidardata(const std::string Path, const std::string LidarBinaryPath, Dat
     // Read Lidar timestamp.csv
     Eigen::Matrix4d LidarRotation;
     std::string Lidarcsvline;
-    int Lidarline_num(1), IMUcount(0);
-    int cnt_75 = 0;
-    int cnt_76 = 0;
-
+    int Lidarline_num(1);
+    size_t IMUcount(0);
 
     while(std::getline(LidarcsvFile, Lidarcsvline) && ros::ok())
     {
@@ -362,8 +360,10 @@ int ReadLidardata(const std::string Path, const std::string LidarBinaryPath, Dat
                 Points(0, k/3) = (double)*(lidar_data.points_ptr() + k);
                 Points(1, k/3) = (double)*(lidar_data.points_ptr() + k + 1);
                 Points(2, k/3) = (double)*(lidar_data.points_ptr() + k + 2);
-            }
+                // std::cout << (int)*(lidar_data.azimuth_idxs_ptr() + k/3) << " " << (float)*(lidar_data.azimuth_degs_ptr() + k/3) << " ";
 
+            }
+            // std::cout << endl;
             // UndistortionPoints
             if(ToUndistortionPoints) MoveDistortionPoints(Points, LidarRotation, j, num_seqs);
 
@@ -457,23 +457,48 @@ int main(int argc, char **argv)
     std::string Lidar_binary_path = data_dir + "lidar/";
     ReadLidardata(LidarcsvPath, Lidar_binary_path, &DB, true);
     
-    for(int i = 1; i < DB.VIOtimestamps.size(); i++){
+    // for(size_t i = 1; i < DB.VIOtimestamps.size(); i++){
+        
+    //     double MinVal = 1000;
+    //     int Minidx = -1;
+    //     for(size_t j = 0; j < DB.LidarLastseqtimestamps.size(); j ++){
+
+    //         double difftime = std::fabs(DB.VIOtimestamps[i] - DB.LidarLastseqtimestamps[j]);
+    //         if(difftime < MinVal){
+    //             MinVal = difftime;
+    //             Minidx = j;
+    //         }
+    //     }
+
+    //     DB.VIOidx2Lidaridx[i] = Minidx;
+        
+    // }
+    int cnt = 1;
+    for(size_t i = 0; i < DB.LidarLastseqtimestamps.size(); i++){
         
         double MinVal = 1000;
-        double Minidx = -1;
-        for(int j = 0; j < DB.LidarLastseqtimestamps.size(); j ++){
-
-            double difftime = std::fabs(DB.VIOtimestamps[i] - DB.LidarLastseqtimestamps[j]);
-            if(difftime < MinVal){
-                MinVal = difftime;
+        int Minidx = -1;
+        
+        for(size_t j = 1; j < DB.VIOtimestamps.size(); j++){
+            
+            double DiffTime = std::fabs(DB.LidarLastseqtimestamps[i] - DB.VIOtimestamps[j]);
+            if(DiffTime < MinVal){
+                MinVal = DiffTime;
                 Minidx = j;
             }
         }
 
-        DB.VIOidx2Lidaridx[i] = Minidx;
-        
+        while(cnt < Minidx ){
+            DB.VIOidx2Lidaridx[cnt] = -1;
+            cnt++;
+        }
+        DB.VIOidx2Lidaridx[cnt] = i;
+        cnt++;
+
+        DB.Lidaridx2VIOidx[i] = Minidx;
     }
 
+    std::cout << std::endl;
     std::cout << " Finish !! " << std::endl;
     std::cout << " Start Publish !!! " << std::endl;
 
@@ -485,8 +510,8 @@ if(PublishTimeStampType == 0){
     int LastIdx = 0;
     // publish delay
     ros::Rate r(10.0);
-    int Publish_cnt = 0;
-    for(int i = 0; i < DB.LidarLastseqtimestamps.size(); i++){
+    int Publish_cnt(0), frame_cnt(0);
+    for(size_t i = 0; i < DB.LidarLastseqtimestamps.size(); i++){
         
         std::vector<Eigen::Vector3d> PublishPoints;
         PublishPoints.clear();
@@ -512,28 +537,30 @@ if(PublishTimeStampType == 0){
 
         
         // find lidartimestamp - cam timestamp
-        int Minidx = -1;
-        double Mindiff = 1000;
-        for(size_t j = 0; j < DB.VIOtimestamps.size(); j++){
-            double diff = std::fabs(DB.VIOtimestamps[j] - DB.LidarLastseqtimestamps[i]);
-            if(diff < Mindiff){
-                Mindiff = diff;
-                Minidx = j;
-            }    
-        }
+        // int Minidx = -1;
+        // double Mindiff = 1000;
+        // for(size_t j = 0; j < DB.VIOtimestamps.size(); j++){
+        //     double diff = std::fabs(DB.VIOtimestamps[j] - DB.LidarLastseqtimestamps[i]);
+        //     if(diff < Mindiff){
+        //         Mindiff = diff;
+        //         Minidx = j;
+        //     }    
+        // }
+        int Minidx = DB.Lidaridx2VIOidx[i];
+
         Eigen::Quaterniond q = ToQuaternion(DB.VIOLidarPoses[Minidx]);
         Eigen::Vector3d p;
         p << DB.VIOLidarPoses[Minidx][3], DB.VIOLidarPoses[Minidx][4], DB.VIOLidarPoses[Minidx][5];            
 
-        if(Publish_cnt % 10 == 0){
+        // if(frame_cnt % 15 == 0){
 
-        
+        std::cout << "Publish !!  Publish num is : " << Publish_cnt << std::endl;
         
         // publish pointcloud
         sensor_msgs::PointCloud2 output;
         // pcl::toROSMsg(PublishPoints, output);
         output = ConverToROSmsg(PublishPoints);
-        output.header.stamp = ros::Time().fromSec(DB.LidarLastseqtimestamps[i]);
+        output.header.stamp = ros::Time().fromSec(DB.VIOtimestamps[i]);
         output.header.frame_id = "/camera_init";
         pubLaserCloud.publish(output);
 
@@ -543,7 +570,7 @@ if(PublishTimeStampType == 0){
         nav_msgs::Odometry VIOodometry;
         VIOodometry.header.frame_id = LidarFrame;
         VIOodometry.child_frame_id = "/laser_odom";
-        VIOodometry.header.stamp = ros::Time().fromSec(DB.LidarLastseqtimestamps[i]);
+        VIOodometry.header.stamp = ros::Time().fromSec(DB.VIOtimestamps[i]);
         VIOodometry.pose.pose.orientation.x = q.x();
         VIOodometry.pose.pose.orientation.y = q.y();
         VIOodometry.pose.pose.orientation.z = q.z();
@@ -561,13 +588,16 @@ if(PublishTimeStampType == 0){
         VIOPath.header.frame_id = LidarFrame;
         pubVIOPath.publish(VIOPath);
 
-        }
-        
-        StartIdx = LastIdx;
         Publish_cnt++;
+        // }
+        
+        frame_cnt++;
+        StartIdx = LastIdx;
         if(!ros::ok()) break;
         r.sleep();
     }
+
+    std::cout << "Total Publish num is : " << Publish_cnt << std::endl;
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -576,10 +606,10 @@ if(PublishTimeStampType == 0){
 if(PublishTimeStampType == 1){
     int StartIdx = 0;
     int LastIdx = 0;
-    int LastLastIdx = 0;
+    int Publish_cnt = 0;
     // publish delay
-    ros::Rate r(10.0);
-    for(int i = 1; i < DB.VIOtimestamps.size(); i+=2){
+    ros::Rate r(20.0);
+    for(size_t i = 1; i < DB.VIOtimestamps.size(); i++){
         
         std::vector<Eigen::Vector3d> PublishPoints;
         PublishPoints.clear();
@@ -588,7 +618,6 @@ if(PublishTimeStampType == 1){
         Eigen::Vector3d p;
         p << DB.VIOLidarPoses[i][3], DB.VIOLidarPoses[i][4], DB.VIOLidarPoses[i][5];
 
-        int LidarIdx = DB.VIOidx2Lidaridx[i]; 
 
         while(DB.Lidartimestamps[LastIdx] <= DB.VIOtimestamps[i]){
             LastIdx++;
@@ -616,12 +645,17 @@ if(PublishTimeStampType == 1){
         }
         // std::cout << "PointCloud size : " << PublishPoints.size() << std::endl;
         // std::cout << "Timestamp : " << ros::Time().fromSec(DB.VIOtimestamps[i]) << std::endl;
+        int LidarIdx = DB.VIOidx2Lidaridx[i]; 
 
+        if(LidarIdx == -1) continue;
+        else{
+
+            std::cout << "Publish !! Publish cnt num is : " << Publish_cnt << std::endl;
         // publish pointcloud
         sensor_msgs::PointCloud2 output;
         // pcl::toROSMsg(PublishPoints, output);
         output = ConverToROSmsg(PublishPoints);
-        output.header.stamp = ros::Time().fromSec(DB.VIOtimestamps[i]);
+        output.header.stamp = ros::Time().fromSec(DB.LidarLastseqtimestamps[LidarIdx]);
         output.header.frame_id = "/camera_init";
         pubLaserCloud.publish(output);        
         
@@ -630,7 +664,7 @@ if(PublishTimeStampType == 1){
         nav_msgs::Odometry VIOodometry;
         VIOodometry.header.frame_id = LidarFrame;
         VIOodometry.child_frame_id = "/laser_odom";
-        VIOodometry.header.stamp = ros::Time().fromSec(DB.VIOtimestamps[i]);
+        VIOodometry.header.stamp = ros::Time().fromSec(DB.LidarLastseqtimestamps[LidarIdx]);
         VIOodometry.pose.pose.orientation.x = q.x();
         VIOodometry.pose.pose.orientation.y = q.y();
         VIOodometry.pose.pose.orientation.z = q.z();
@@ -648,10 +682,16 @@ if(PublishTimeStampType == 1){
         VIOPath.header.frame_id = LidarFrame;
         pubVIOPath.publish(VIOPath);
 
+        Publish_cnt++;
+
+        }
+        
         StartIdx = LastIdx;
         if(!ros::ok()) break;
         r.sleep();                              
     }
+
+    std::cout << "Total Publish Cnt is : " << Publish_cnt << std::endl;
 }        
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -659,76 +699,87 @@ if(PublishTimeStampType == 1){
 //////////////////////////////////////////////// Publish Cam Keyframe timestamp  ////////////////////////////////////////////////////////
 if(PublishTimeStampType == 2){
     
+    int Publish_cnt = 0;
     int StartIdx = 0;
     int LastIdx = 0;
     // publish delay
     ros::Rate r(20.0);
     
-    for(int i = 1; i < DB.VIOtimestamps.size(); i++){
+    for(size_t i = 1; i < DB.VIOtimestamps.size(); i++){
         
         std::vector<Eigen::Vector3d> PublishPoints;
         PublishPoints.clear();
 
 
 
-        int SlamIdx = -1;
-        for(int j = 0; j < DB.Slamcamidxs.size(); j++){
+        for(size_t j = 0; j < DB.Slamcamidxs.size(); j++){
             
             if(i == DB.Slamcamidxs[j]){
-                std::cout << " Keyframe !!  Idx is : " << i << std::endl;
+                std::cout << " Keyframe !!  Cam Idx is : " << i << std::endl;
                 Eigen::Quaterniond q = ToQuaternion(DB.SlamKFPoses[j]);
                 Eigen::Vector3d p;
                 p << DB.SlamKFPoses[j][3], DB.SlamKFPoses[j][4], DB.SlamKFPoses[j][5];                
             
                 int LidarIdx = DB.VIOidx2Lidaridx[i];
-                for(int k = 0; k < DB.Lidartimestamps.size(); k++){
-                    if(DB.LidarLastseqtimestamps[LidarIdx - 1] == DB.Lidartimestamps[k]) StartIdx = k + 1;
-                    if(DB.LidarLastseqtimestamps[LidarIdx] == DB.Lidartimestamps[k]) LastIdx = k + 1;
-                }
-                // std::cout << LastIdx - StartIdx << std::endl;
-                for(int t = StartIdx; t < LastIdx; t++){
+                if(LidarIdx == -1) break;
+                else{
                     
-                    for(int k = 0; k < DB.LidarPoints[t].cols(); k++){
+                    // double MinDiffTime = std::fabs(DB.LidarLastseqtimestamps[LidarIdx] - DB.SlamKFtimestamps[j]);
+                    // std::cout << "MinDiff TIme : " << MinDiffTime << std::endl;
+                    for(size_t k = 0; k < DB.Lidartimestamps.size(); k++){
+                        if(DB.LidarLastseqtimestamps[LidarIdx - 1] == DB.Lidartimestamps[k]) StartIdx = k + 1;
+                        if(DB.LidarLastseqtimestamps[LidarIdx] == DB.Lidartimestamps[k]) LastIdx = k + 1;
+                    }
+                    // std::cout << LastIdx - StartIdx << std::endl;
+                    for(int t = StartIdx; t < LastIdx; t++){
+                        
+                        for(int k = 0; k < DB.LidarPoints[t].cols(); k++){
 
-                        Eigen::Vector3d point;
-                        point.x() = DB.LidarPoints[t](0, k);
-                        point.y() = DB.LidarPoints[t](1, k);
-                        point.z() = DB.LidarPoints[t](2, k);
-                        PublishPoints.push_back(point);
-                    } 
+                            Eigen::Vector3d point;
+                            point.x() = DB.LidarPoints[t](0, k);
+                            point.y() = DB.LidarPoints[t](1, k);
+                            point.z() = DB.LidarPoints[t](2, k);
+                            PublishPoints.push_back(point);
+                        } 
+                    }
+
+                    // if(MinDiffTime < 0.020){
+                        
+                        std::cout << "Publish !!  Publish num is : " << Publish_cnt << std::endl;
+                        // publish pointcloud
+                        sensor_msgs::PointCloud2 output;
+                        // pcl::toROSMsg(PublishPoints, output);
+                        output = ConverToROSmsg(PublishPoints);
+                        output.header.stamp = ros::Time().fromSec(DB.SlamKFtimestamps[j]);
+                        output.header.frame_id = "/camera_init";
+                        pubLaserCloud.publish(output);        
+                            
+                        // publish odometry
+                        // std::cout << "Publish!" << std::endl;
+                        nav_msgs::Odometry VIOodometry;
+                        VIOodometry.header.frame_id = LidarFrame;
+                        VIOodometry.child_frame_id = "/laser_odom";
+                        VIOodometry.header.stamp = ros::Time().fromSec(DB.SlamKFtimestamps[j]);
+                        VIOodometry.pose.pose.orientation.x = q.x();
+                        VIOodometry.pose.pose.orientation.y = q.y();
+                        VIOodometry.pose.pose.orientation.z = q.z();
+                        VIOodometry.pose.pose.orientation.w = q.w();
+                        VIOodometry.pose.pose.position.x = p.x();
+                        VIOodometry.pose.pose.position.y = p.y();
+                        VIOodometry.pose.pose.position.z = p.z();
+                        pubVIOodometry.publish(VIOodometry);
+
+                        geometry_msgs::PoseStamped VIOPose;
+                        VIOPose.header = VIOodometry.header;
+                        VIOPose.pose = VIOodometry.pose.pose;
+                        VIOPath.header.stamp = VIOodometry.header.stamp;
+                        VIOPath.poses.push_back(VIOPose);
+                        VIOPath.header.frame_id = LidarFrame;
+                        pubVIOPath.publish(VIOPath);
+                            
+                        Publish_cnt++;
+                    // }
                 }
-
-                // publish pointcloud
-                sensor_msgs::PointCloud2 output;
-                // pcl::toROSMsg(PublishPoints, output);
-                output = ConverToROSmsg(PublishPoints);
-                output.header.stamp = ros::Time().fromSec(DB.SlamKFtimestamps[j]);
-                output.header.frame_id = "/camera_init";
-                pubLaserCloud.publish(output);        
-                
-                // publish odometry
-                // std::cout << "Publish!" << std::endl;
-                nav_msgs::Odometry VIOodometry;
-                VIOodometry.header.frame_id = LidarFrame;
-                VIOodometry.child_frame_id = "/laser_odom";
-                VIOodometry.header.stamp = ros::Time().fromSec(DB.SlamKFtimestamps[j]);
-                VIOodometry.pose.pose.orientation.x = q.x();
-                VIOodometry.pose.pose.orientation.y = q.y();
-                VIOodometry.pose.pose.orientation.z = q.z();
-                VIOodometry.pose.pose.orientation.w = q.w();
-                VIOodometry.pose.pose.position.x = p.x();
-                VIOodometry.pose.pose.position.y = p.y();
-                VIOodometry.pose.pose.position.z = p.z();
-                pubVIOodometry.publish(VIOodometry);
-
-                geometry_msgs::PoseStamped VIOPose;
-                VIOPose.header = VIOodometry.header;
-                VIOPose.pose = VIOodometry.pose.pose;
-                VIOPath.header.stamp = VIOodometry.header.stamp;
-                VIOPath.poses.push_back(VIOPose);
-                VIOPath.header.frame_id = LidarFrame;
-                pubVIOPath.publish(VIOPath);
-            
             }
 
         }
@@ -736,6 +787,8 @@ if(PublishTimeStampType == 2){
         if(!ros::ok()) break;
         r.sleep();                              
     }
+
+    std::cout << "Publish Num is : " << Publish_cnt << std::endl;
 
 }
             

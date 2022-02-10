@@ -18,7 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   cv_bridge
   tf
-  rviz_visual_tools
+  # rviz_visual_tools
 )
 # find_package( Boost REQUIRED COMPONENTS 
 # timer )

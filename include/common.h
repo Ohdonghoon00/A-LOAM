@@ -62,6 +62,7 @@ struct DataBase
     std::vector<Eigen::Matrix3Xd> LidarPoints;
 
     std::map<int, int> VIOidx2Lidaridx;
+    std::map<int, int> Lidaridx2VIOidx;
 
 };
 

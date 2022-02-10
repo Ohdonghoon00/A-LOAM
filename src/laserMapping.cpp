@@ -947,6 +947,7 @@ void process()
             std::cout << t_w_curr.x() << "	" << t_w_curr.y() << "	" << t_w_curr.z() << std::endl;
 			
 			LastTimestamp_mapping = CurrTimestamp_mapping;
+			std::cout << "FrameCnt : " << frameCount << std::endl;
 			frameCount++;
 		}
 		std::chrono::milliseconds dura(2);

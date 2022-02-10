@@ -5,7 +5,7 @@
         <param name="data_dir" type="string" value="/home/multipleye/Dataset/201014_skt_lobby_day_lidar/" />   <!--replace with your data dir -->
         <param name="to_bag" type="bool" value="false" />                                       <!-- true : make bagfile in data_dir/output_bag_file -->
         <param name="output_bag_file" type="string" value="multipleye_lidar_data.bag" />        <!--replace with your output bagfile -->
-        <param name="PublishTimeStampType" type="int" value="1" />
+        <param name="PublishTimeStampType" type="int" value="0" />
         <param name="publish_delay" type="int" value="1" />                                     <!-- 1 : 10hz , 2: 5hz -->
     </node>
 </launch>
