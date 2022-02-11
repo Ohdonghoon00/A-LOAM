@@ -26,6 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(PCL REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(OpenCV REQUIRED)
 
 include_directories(
   include
@@ -33,6 +34,7 @@ include_directories(
   ${CERES_INCLUDE_DIRS}
 	${catkin_INCLUDE_DIRS} 
   # ${Boost_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 catkin_package(
@@ -56,7 +58,6 @@ target_link_libraries(alaserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES
 
 add_executable(PublishLidarData2 src/PublishLidarData2.cpp)
 target_link_libraries(PublishLidarData2 glog ${catkin_LIBRARIES})
-
 
 
 

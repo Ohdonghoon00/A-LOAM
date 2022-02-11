@@ -40,10 +40,10 @@ DataBase DB;
      
 
 
-Eigen::Matrix4d gyroToRotation(Eigen::Vector3f gyro)
+Eigen::Matrix4d gyroToRotation(Eigen::Vector3f gyro, float timediff)
 {
-    float t = 0.005; // 200Hz
-    float angle_x(gyro[0] * t), angle_y(gyro[1] * t), angle_z(gyro[2] * t);  
+    // float t = 0.005; // 200Hz
+    float angle_x(gyro[0] * timediff), angle_y(gyro[1] * timediff), angle_z(gyro[2] * timediff);  
     
     Eigen::Matrix3f data_x;
     data_x <<   1.0, 0.0, 0.0,
@@ -312,8 +312,16 @@ int ReadLidardata(const std::string Path, const std::string LidarBinaryPath, Dat
 
         // Integral IMU rotation to Camera two frames
         Eigen::Matrix4d IMURotation_integral = Eigen::Matrix4d::Identity();
+        
         while(LidarScantimestamp > db->IMUtimestamps[IMUcount]){
-            Eigen::Matrix4d IMURotation = gyroToRotation(db->IMUGyros[IMUcount]);
+            
+            float timediff = 0;
+            if(IMUcount == 0) timediff = 0.005;
+            else{
+                timediff = db->IMUtimestamps[IMUcount] - db->IMUtimestamps[IMUcount - 1];
+            }
+
+            Eigen::Matrix4d IMURotation = gyroToRotation(db->IMUGyros[IMUcount], timediff);
             IMURotation_integral = IMURotation * IMURotation_integral;
             IMUcount++;
             if(IMUcount == db->IMUtimestamps.size()) break;
@@ -494,6 +502,7 @@ int main(int argc, char **argv)
         }
         DB.VIOidx2Lidaridx[cnt] = i;
         cnt++;
+        
 
         DB.Lidaridx2VIOidx[i] = Minidx;
     }
@@ -510,7 +519,9 @@ if(PublishTimeStampType == 0){
     int LastIdx = 0;
     // publish delay
     ros::Rate r(10.0);
-    int Publish_cnt(0), frame_cnt(0);
+
+
+    int Publish_cnt(0), frame_cnt(0), Jump_num(0);
     for(size_t i = 0; i < DB.LidarLastseqtimestamps.size(); i++){
         
         std::vector<Eigen::Vector3d> PublishPoints;
@@ -533,26 +544,42 @@ if(PublishTimeStampType == 0){
         }
         // std::cout << "PointCloud size : " << PublishPoints.size() << std::endl;
         std::cout << "Timestamp : " << ros::Time().fromSec(DB.LidarLastseqtimestamps[i]) << std::endl;
-        
+        if(i == 0){
+            StartIdx = LastIdx;
+            continue;
+        }
+        int Minidx = DB.Lidaridx2VIOidx[i - 1];
+        double difftime = std::fabs(DB.LidarLastseqtimestamps[i - 1] - DB.VIOtimestamps[Minidx]);
+        if(difftime > 0.010){
+            
+            Jump_num++;
+            
+            if(Jump_num < 5){
+                StartIdx = LastIdx;
+                continue;
+            }
+            
+        }
 
         
-        // find lidartimestamp - cam timestamp
-        // int Minidx = -1;
-        // double Mindiff = 1000;
-        // for(size_t j = 0; j < DB.VIOtimestamps.size(); j++){
-        //     double diff = std::fabs(DB.VIOtimestamps[j] - DB.LidarLastseqtimestamps[i]);
-        //     if(diff < Mindiff){
-        //         Mindiff = diff;
-        //         Minidx = j;
-        //     }    
+        // if(difftime < 0){
+        //     if(std::fabs(difftime) > 0.020){
+                
+        //         Jump_num++;
+                
+        //         if(Jump_num < 3){
+        //             StartIdx = LastIdx;
+        //             continue;
+        //         }
+        //         Jump_num = 0; 
+        //     }
         // }
-        int Minidx = DB.Lidaridx2VIOidx[i];
 
         Eigen::Quaterniond q = ToQuaternion(DB.VIOLidarPoses[Minidx]);
         Eigen::Vector3d p;
         p << DB.VIOLidarPoses[Minidx][3], DB.VIOLidarPoses[Minidx][4], DB.VIOLidarPoses[Minidx][5];            
 
-        // if(frame_cnt % 15 == 0){
+        // if(frame_cnt % 10 == 0){
 
         std::cout << "Publish !!  Publish num is : " << Publish_cnt << std::endl;
         
@@ -590,7 +617,7 @@ if(PublishTimeStampType == 0){
 
         Publish_cnt++;
         // }
-        
+        Jump_num = 0;
         frame_cnt++;
         StartIdx = LastIdx;
         if(!ros::ok()) break;
@@ -618,20 +645,15 @@ if(PublishTimeStampType == 1){
         Eigen::Vector3d p;
         p << DB.VIOLidarPoses[i][3], DB.VIOLidarPoses[i][4], DB.VIOLidarPoses[i][5];
 
+        int LidarIdx = DB.VIOidx2Lidaridx[i]; 
 
-        while(DB.Lidartimestamps[LastIdx] <= DB.VIOtimestamps[i]){
+        if(LidarIdx == -1) continue;
+        else{
+        
+        while(DB.Lidartimestamps[LastIdx] <= DB.LidarLastseqtimestamps[LidarIdx]){
             LastIdx++;
         }
-        // StartIdx = LastIdx - 76;
-        // if(StartIdx < 0) StartIdx = 0;
-        // double StartTime = DB.VIOtimestamps[i] -0.1; // 100ms
-        // for(int j = 0; j < DB.Lidartimestamps.size(); j++){
-        //             if(DB.LidarLastseqtimestamps[LidarIdx - 1] == DB.Lidartimestamps[k]) StartIdx = k + 1;
-        //             if(DB.LidarLastseqtimestamps[LidarIdx] == DB.Lidartimestamps[k]) LastIdx = k + 1;
-        //         }        
-        // while(DB.Lidartimestamps[LastIdx] <= DB.LidarLastseqtimestamps[LidarIdx]){
-        //     LastIdx++;
-        // }
+
         for(int j = StartIdx; j < LastIdx; j++){
             
             for(int k = 0; k < DB.LidarPoints[j].cols(); k++){
@@ -645,10 +667,6 @@ if(PublishTimeStampType == 1){
         }
         // std::cout << "PointCloud size : " << PublishPoints.size() << std::endl;
         // std::cout << "Timestamp : " << ros::Time().fromSec(DB.VIOtimestamps[i]) << std::endl;
-        int LidarIdx = DB.VIOidx2Lidaridx[i]; 
-
-        if(LidarIdx == -1) continue;
-        else{
 
             std::cout << "Publish !! Publish cnt num is : " << Publish_cnt << std::endl;
         // publish pointcloud
@@ -684,9 +702,9 @@ if(PublishTimeStampType == 1){
 
         Publish_cnt++;
 
+        StartIdx = LastIdx;
         }
         
-        StartIdx = LastIdx;
         if(!ros::ok()) break;
         r.sleep();                              
     }
@@ -715,22 +733,35 @@ if(PublishTimeStampType == 2){
         for(size_t j = 0; j < DB.Slamcamidxs.size(); j++){
             
             if(i == DB.Slamcamidxs[j]){
+                
                 std::cout << " Keyframe !!  Cam Idx is : " << i << std::endl;
                 Eigen::Quaterniond q = ToQuaternion(DB.SlamKFPoses[j]);
                 Eigen::Vector3d p;
                 p << DB.SlamKFPoses[j][3], DB.SlamKFPoses[j][4], DB.SlamKFPoses[j][5];                
             
                 int LidarIdx = DB.VIOidx2Lidaridx[i];
-                if(LidarIdx == -1) break;
+                if(LidarIdx == -1) {
+                    int idx = 0;
+                    while(DB.SlamKFtimestamps[j] > DB.LidarLastseqtimestamps[idx]){
+                        idx++;
+                    }
+                    for(size_t k = 0; k < DB.Lidartimestamps.size(); k++){
+                        if(DB.LidarLastseqtimestamps[idx] == DB.Lidartimestamps[k]) StartIdx = k + 1;
+                        if(DB.LidarLastseqtimestamps[idx + 1] == DB.Lidartimestamps[k]) LastIdx = k + 1;
+                    }                
+                }
                 else{
-                    
+                     std::cout << "idx: " << LidarIdx << std::endl;  
                     // double MinDiffTime = std::fabs(DB.LidarLastseqtimestamps[LidarIdx] - DB.SlamKFtimestamps[j]);
                     // std::cout << "MinDiff TIme : " << MinDiffTime << std::endl;
                     for(size_t k = 0; k < DB.Lidartimestamps.size(); k++){
-                        if(DB.LidarLastseqtimestamps[LidarIdx - 1] == DB.Lidartimestamps[k]) StartIdx = k + 1;
-                        if(DB.LidarLastseqtimestamps[LidarIdx] == DB.Lidartimestamps[k]) LastIdx = k + 1;
+                        if(DB.LidarLastseqtimestamps[LidarIdx] == DB.Lidartimestamps[k]) StartIdx = k + 1;
+                        if(DB.LidarLastseqtimestamps[LidarIdx + 1] == DB.Lidartimestamps[k]) LastIdx = k + 1;
                     }
-                    // std::cout << LastIdx - StartIdx << std::endl;
+                    
+                    
+                }
+                    std::cout << LastIdx - StartIdx << std::endl;
                     for(int t = StartIdx; t < LastIdx; t++){
                         
                         for(int k = 0; k < DB.LidarPoints[t].cols(); k++){
@@ -779,7 +810,7 @@ if(PublishTimeStampType == 2){
                             
                         Publish_cnt++;
                     // }
-                }
+                
             }
 
         }
